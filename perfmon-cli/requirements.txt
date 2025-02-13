@@ -1,0 +1,5 @@
+psutil>=5.9.0
+rich>=10.0.0
+plotext>=5.2.8
+pyyaml>=6.0.0
+pandas>=1.5.0

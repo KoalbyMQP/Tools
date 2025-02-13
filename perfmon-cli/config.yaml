@@ -1,0 +1,7 @@
+sampling_interval: 0.5
+monitor_network: true
+export_formats: 
+  - json
+  - csv
+show_live_metrics: true
+create_plots: true

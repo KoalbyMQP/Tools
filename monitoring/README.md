@@ -1,15 +1,18 @@
 # Monitoring Project for Raspberry Pi 5
 
 ## Overview
+
 This project sets up a comprehensive monitoring system for your Raspberry Pi 5 using Docker containers. It includes Grafana and Node Exporter for visualizing system metrics, Prometheus for metrics collection.
 
 ## Prerequisites
+
 - A Raspberry Pi 5 running a compatible Linux distribution.
 - At least 1GB of free disk space.
 - An active internet connection.
-- The system must be recognized as a Raspberry Pi 
+- The system must be recognized as a Raspberry Pi
 
 ## Setup Instructions
+
 1. Clone or copy the project repository to your Raspberry Pi.
 2. Run the setup script with root privileges:
 
@@ -31,6 +34,7 @@ This project sets up a comprehensive monitoring system for your Raspberry Pi 5 u
    - Creates a `status.sh` script to easily check the status of the containers and view logs.
 
 ## Accessing the Monitoring Dashboard
+
 - Once the setup completes successfully, access Grafana by navigating to:
 
   http://<Raspberry_Pi_IP>:3000
@@ -44,6 +48,7 @@ This project sets up a comprehensive monitoring system for your Raspberry Pi 5 u
 - Once logged in, go to Dashboards in the left sidebar and select Node Exporter. You can customize the dashboard and other settings as needed.
 
 ## Post-Setup Commands
+
 - To check the status of the monitoring containers, run:
 
   ./status.sh
@@ -53,13 +58,15 @@ This project sets up a comprehensive monitoring system for your Raspberry Pi 5 u
   docker-compose logs
 
 ## Troubleshooting Tips
+
 - Ensure that you run the setup script with sudo.
 - If a required port is in use, the script will attempt to stop the container using it.
 - Verify that your Raspberry Pi has an active internet connection.
 - Check for sufficient disk space (minimum 1GB free) before running the script.
 - Review the error messages displayed during the setup process for guidance on resolving issues.
-- If containers do not start, inspect logs using docker-compose logs <service>.
+- If containers do not start, inspect logs using docker-compose logs service_name.
 
 ## Additional Notes
+
 - The setup script is designed specifically for a plug and play setup so please report if you encounter any issues.
 - You can customize Docker Compose configurations, Grafana dashboards, and Prometheus settings as needed for your specific monitoring requirements.
