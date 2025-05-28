@@ -1,0 +1,8 @@
+method: grid
+parameters:
+  benchmark: 
+    value: simple_math
+  iterations: 
+    values: [100, 500, 1000]
+  threads: 
+    values: [1, 2, 4]
