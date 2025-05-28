@@ -1,0 +1,38 @@
+
+[project]
+name = "ava-bench"
+version = "0"
+description = "Benchmarking suite for Raspberry Pi devices"
+readme = "README.md"
+requires-python = ">=3.9" # TODO: Check for which versions of python this actually works
+license = "MIT"
+authors = [
+    {name = "Jacob Molnia", email = "jrmolnia@wpi.edu"}
+]
+
+dependencies = [
+    "psutil>=7.0.0",
+    "click>=8.1.8",
+    "pyyaml>=6.0.2",
+    "rich>=14.0.0",
+]
+
+[project.optional-dependencies]
+tensorflow = [
+]
+pytorch = [
+]
+opencv = [
+]
+
+#[project.urls]
+# Repository = "" # TODO: Add repo once I get the go ahead
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+]
