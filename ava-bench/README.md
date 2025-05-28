@@ -1,10 +1,9 @@
-# AVA-Bench
-
 <div align="center">
   <img src="./assets/github-header-image.png" alt="Project Banner" width="800"/>
 </div>
 
 **⚠️ Currently in Development**
+# 
 
 AVA-Bench is a comprehensive command-line ML benchmarking suite designed specifically for Raspberry Pi devices. It provides automated performance evaluation and detailed profiling of machine learning workloads across different Pi models and configurations.
 
