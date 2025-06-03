@@ -114,6 +114,34 @@ def sweep(ctx, config_path, name, output_dir, monitor):
         display_error(console, f"Sweep failed: {str(e)}")
         ctx.exit(1)
 
+@click.command()
+@click.pass_context  
+def frameworks(ctx):
+    console = ctx.obj['console']
+    
+    console.print("[info]Checking ML framework availability...[/info]")
+    console.print()
+    
+    # Import from single frameworks file
+    from ..frameworks import get_all_framework_info
+    framework_info = get_all_framework_info()
+    
+    for framework_id, info in framework_info.items():
+        available = info["available"]
+        version = info.get("version", "Unknown")
+        error = info.get("error")
+        install_suggestion = info.get("install_suggestion", "")
+        
+        if available:
+            console.print(f"[green]✓[/green] [benchmark]{framework_id}[/benchmark] - Version {version}")
+        else:
+            console.print(f"[red]✗[/red] [benchmark]{framework_id}[/benchmark] - [error]Not available[/error]")
+            if error:
+                console.print(f"    Error: {error}")
+            if install_suggestion:
+                console.print(f"    Install: [yellow]{install_suggestion}[/yellow]")
+        console.print()
+
 def _run_with_inline_dashboard(console, bench, benchmark_id, system_monitor, dashboard):
     """Run benchmark with inline dashboard that refreshes in place"""
     from rich.live import Live
