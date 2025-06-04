@@ -40,9 +40,10 @@ def run(ctx, benchmark_id, iterations, output, monitor):
         bench = orch.create_benchmark(benchmark_id, config)
         
         if not bench.initialize():
-            display_error(console, f"Failed to initialize benchmark: {benchmark_id}")
-            ctx.exit(1)
-        
+            print(f"❌ Error: Failed to initialize benchmark: {benchmark_id}")
+            if hasattr(bench, 'error') and bench.error:
+                print(f"❌ Error details: {bench.error}")
+            return 1        
         if monitor:
             result = _run_with_inline_dashboard(console, bench, benchmark_id, system_monitor, dashboard)
         else:
