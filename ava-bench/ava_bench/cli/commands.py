@@ -189,23 +189,26 @@ def _save_monitoring_data(monitor, output_path, console, benchmark_result=None):
     try:
         import json
         
+        # Export all collected monitoring data
         export_data = monitor.export_data()
         
-        if benchmark_result: export_data['benchmark_result'] = benchmark_result
+        # Add benchmark result to the export
+        if benchmark_result:
+            export_data['benchmark_result'] = benchmark_result
         
+        # Add summary statistics - now duration will be calculated correctly
         metrics = monitor.get_all_metric_types()
-        start_time = export_data.get('start_time')
-        end_time = export_data.get('end_time')
         
-        if start_time is not None and end_time is not None:
-            duration = end_time - start_time
-        else:
-            duration = 0.0
+        # Duration is now calculated in export_data, but let's add more summary info
+        duration = export_data.get('collection_duration', 0.0)
         
         export_data['summary'] = {
             'total_metrics_collected': len(metrics),
             'metric_types': metrics,
-            'collection_duration': duration
+            'collection_duration': duration,
+            'start_time': export_data.get('start_time'),
+            'end_time': export_data.get('end_time'),
+            'total_samples': sum(len(samples) for samples in export_data['metrics'].values())
         }
         
         with open(output_path, 'w') as f:
@@ -214,9 +217,18 @@ def _save_monitoring_data(monitor, output_path, console, benchmark_result=None):
         console.print(f"[green]✓[/green] Monitoring data saved to {output_path}")
         console.print(f"[info]Collected {len(metrics)} metric types over {duration:.1f}s[/info]")
         
+        # Show some additional stats
+        total_samples = export_data['summary']['total_samples']
+        if duration > 0:
+            sample_rate = total_samples / duration
+            console.print(f"[info]Total samples: {total_samples} ({sample_rate:.1f} samples/sec)[/info]")
+        
     except Exception as e:
         console.print(f"[red]Failed to save monitoring data: {e}[/red]")
-
+        # Add debug info
+        import traceback
+        console.print(f"[dim]Debug: {traceback.format_exc()}[/dim]")
+        
 def _run_sweep_with_inline_dashboard(console, sweep_runner, config_path, combinations, system_monitor, dashboard, sweep_name):
     """Run sweep with inline dashboard that refreshes in place"""
     from rich.live import Live

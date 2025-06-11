@@ -133,12 +133,39 @@ class StreamingMonitor:
     
     def export_data(self, start_time: float = None, end_time: float = None) -> dict:
         """Export all collected data in a structured format."""
+        
+        # First, collect all samples to determine the actual time range
+        all_samples = []
+        for stream in self.stream_manager.streams.values():
+            samples = stream.get_samples()
+            all_samples.extend(samples)
+        
+        # Calculate actual start and end times from collected data
+        actual_start_time = start_time
+        actual_end_time = end_time
+        
+        if all_samples:
+            all_timestamps = [s.timestamp for s in all_samples]
+            
+            if actual_start_time is None:
+                actual_start_time = min(all_timestamps)
+            if actual_end_time is None:
+                actual_end_time = max(all_timestamps)
+        else:
+            # No data collected
+            if actual_start_time is None:
+                actual_start_time = 0.0
+            if actual_end_time is None:
+                actual_end_time = 0.0
+        
         data = {
-            'start_time': start_time,
-            'end_time': end_time,
+            'start_time': actual_start_time,
+            'end_time': actual_end_time,
+            'collection_duration': actual_end_time - actual_start_time,
             'metrics': {}
         }
         
+        # Now export metrics with proper filtering
         for metric_type, stream in self.stream_manager.streams.items():
             samples = stream.get_samples(start_time)
             
@@ -157,6 +184,7 @@ class StreamingMonitor:
             ]
         
         return data
+
 
 
 # Compatibility function for existing code
