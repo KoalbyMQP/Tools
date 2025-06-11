@@ -35,8 +35,7 @@ def cli(ctx, verbose, quiet):
 
 
 # Import and register commands
-from .commands import run, sweep, frameworks
+from .commands import run, sweep
 
 cli.add_command(run)
 cli.add_command(sweep)
-cli.add_command(frameworks)

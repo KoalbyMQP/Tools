@@ -5,7 +5,7 @@ import click
 
 from ..core.orchestrator import Orchestrator
 from ..core.sweep import SweepConfig, Sweep
-from ..hardware.monitor import SystemMonitor
+from ..monitoring import create_monitor
 from .dashboard import DashboardLayout
 from .display import display_error, display_success
 
@@ -15,8 +15,9 @@ from .display import display_error, display_success
 @click.option('--iterations', '-i', default=1000, help='Number of iterations')
 @click.option('--output', '-o', type=click.Path(), help='Output file for results')
 @click.option('--monitor/--no-monitor', default=True, help='Show live dashboard')
+@click.option('--save-monitoring', type=click.Path(), help='Save monitoring data to file')
 @click.pass_context
-def run(ctx, benchmark_id, iterations, output, monitor):    
+def run(ctx, benchmark_id, iterations, output, monitor, save_monitoring):    
     console = ctx.obj['console']
     quiet = ctx.obj['quiet']
     
@@ -30,7 +31,7 @@ def run(ctx, benchmark_id, iterations, output, monitor):
         return
     
     # Dashboard mode
-    system_monitor = SystemMonitor()
+    system_monitor = create_monitor(collect_perf=True)
     dashboard = DashboardLayout(console)
     
     try:
@@ -47,7 +48,9 @@ def run(ctx, benchmark_id, iterations, output, monitor):
         if monitor:
             result = _run_with_inline_dashboard(console, bench, benchmark_id, system_monitor, dashboard)
         else:
+            system_monitor.start_monitoring()
             result = bench.test()
+            system_monitor.stop_monitoring()
         
         bench.cleanup()
         
@@ -55,9 +58,13 @@ def run(ctx, benchmark_id, iterations, output, monitor):
         display_success(console, f"Benchmark '{benchmark_id}' completed successfully!")
         
         if output: _save_result(result, output, console, quiet)
+        if save_monitoring:
+            _save_monitoring_data(system_monitor, save_monitoring, console, result)
+
         
     except Exception as e:
         display_error(console, f"Benchmark failed: {str(e)}")
+        system_monitor.stop_monitoring()
         ctx.exit(1)
 
 
@@ -66,8 +73,9 @@ def run(ctx, benchmark_id, iterations, output, monitor):
 @click.option('--name', '-n', help='Name for this sweep run')
 @click.option('--output-dir', '-o', type=click.Path(), help='Output directory for results')
 @click.option('--monitor/--no-monitor', default=True, help='Show live dashboard')
+@click.option('--save-monitoring', type=click.Path(), help='Save monitoring data to file')
 @click.pass_context
-def sweep(ctx, config_path, name, output_dir, monitor):    
+def sweep(ctx, config_path, name, output_dir, monitor, save_monitoring):
     console = ctx.obj['console']
     quiet = ctx.obj['quiet']
     
@@ -81,8 +89,8 @@ def sweep(ctx, config_path, name, output_dir, monitor):
     
     console.print(f"[info]Loading sweep config: [benchmark]{config_path}[/benchmark][/info]")
     
-    # Initialize system monitor and dashboard
-    system_monitor = SystemMonitor()
+    system_monitor = create_monitor(collect_perf=True)
+    
     dashboard = DashboardLayout(console)
     
     try:
@@ -91,8 +99,12 @@ def sweep(ctx, config_path, name, output_dir, monitor):
         combinations = config.generate_combinations()
         
         console.print(f"[info]Generated [metric]{len(combinations)}[/metric] benchmark combinations[/info]")
-        stats = system_monitor.get_all_stats()
-        console.print(f"[info]Running on: [benchmark]{stats['pi_model']}[/benchmark][/info]")
+        
+        system_monitor.start_monitoring()
+        time.sleep(0.1)  # Brief delay to get initial readings
+        stats = system_monitor.get_current_metrics()
+        
+        console.print(f"[info]Running on: [benchmark]{stats.get('pi_model', 'Unknown')}[/benchmark][/info]")
         console.print()
         
         # Setup sweep
@@ -103,6 +115,7 @@ def sweep(ctx, config_path, name, output_dir, monitor):
             results = _run_sweep_with_inline_dashboard(console, sweep_runner, config_path, combinations, system_monitor, dashboard, name or "sweep")
         else:
             results = sweep_runner.run(config_path)
+            system_monitor.stop_monitoring()
         
         # Display final results table (after dashboard)
         display_success(console, f"Sweep completed! {len(results)} benchmarks executed.")
@@ -110,38 +123,14 @@ def sweep(ctx, config_path, name, output_dir, monitor):
         # Save results if requested
         if output_dir:
             _save_sweep_results(results, output_dir, name, console, quiet)
+        if save_monitoring:
+            _save_monitoring_data(system_monitor, save_monitoring, console, results)
             
     except Exception as e:
         display_error(console, f"Sweep failed: {str(e)}")
+        system_monitor.stop_monitoring()  # Make sure to stop monitoring
         ctx.exit(1)
 
-@click.command()
-@click.pass_context  
-def frameworks(ctx):
-    console = ctx.obj['console']
-    
-    console.print("[info]Checking ML framework availability...[/info]")
-    console.print()
-    
-    # Import from single frameworks file
-    from ..frameworks import get_all_framework_info
-    framework_info = get_all_framework_info()
-    
-    for framework_id, info in framework_info.items():
-        available = info["available"]
-        version = info.get("version", "Unknown")
-        error = info.get("error")
-        install_suggestion = info.get("install_suggestion", "")
-        
-        if available:
-            console.print(f"[green]✓[/green] [benchmark]{framework_id}[/benchmark] - Version {version}")
-        else:
-            console.print(f"[red]✗[/red] [benchmark]{framework_id}[/benchmark] - [error]Not available[/error]")
-            if error:
-                console.print(f"    Error: {error}")
-            if install_suggestion:
-                console.print(f"    Install: [yellow]{install_suggestion}[/yellow]")
-        console.print()
 
 def _run_with_inline_dashboard(console, bench, benchmark_id, system_monitor, dashboard):
     """Run benchmark with inline dashboard that refreshes in place"""
@@ -150,9 +139,9 @@ def _run_with_inline_dashboard(console, bench, benchmark_id, system_monitor, das
     # Dashboard stages
     stages = ["initializing", "loading", "computing", "finalizing", "complete"]
     
-    # Initial dashboard setup
+    system_monitor.start_monitoring()    
+    dashboard.update_system_tiles(system_monitor.get_current_metrics())
     dashboard.update_header(f"Running: {benchmark_id}")
-    dashboard.update_system_tiles(system_monitor.get_all_stats())
     dashboard.update_progress(stages[0], 0, [], stages[1:])
     dashboard.update_results()
     dashboard.update_footer("Starting benchmark...")
@@ -171,9 +160,9 @@ def _run_with_inline_dashboard(console, bench, benchmark_id, system_monitor, das
             current_stage = stages[current_stage_idx]
             past_stages = stages[:current_stage_idx] if current_stage_idx > 0 else []
             future_stages = stages[current_stage_idx + 1:] if current_stage_idx < len(stages) - 1 else []
+
+            dashboard.update_system_tiles(system_monitor.get_current_metrics())
             
-            # Update dashboard
-            dashboard.update_system_tiles(system_monitor.get_all_stats())
             dashboard.update_progress(current_stage, progress_percent, past_stages, future_stages)
             dashboard.update_footer(f"Progress: {progress_percent}% - {current_stage}")
             
@@ -191,17 +180,49 @@ def _run_with_inline_dashboard(console, bench, benchmark_id, system_monitor, das
         
         time.sleep(1)  # Show final state briefly
     
-    # After Live exits, the final dashboard stays visible
+    system_monitor.stop_monitoring()
     return result
 
+
+def _save_monitoring_data(monitor, output_path, console, benchmark_result=None):
+    """Save monitoring data with benchmark results."""
+    try:
+        import json
+        
+        export_data = monitor.export_data()
+        
+        if benchmark_result: export_data['benchmark_result'] = benchmark_result
+        
+        metrics = monitor.get_all_metric_types()
+        start_time = export_data.get('start_time')
+        end_time = export_data.get('end_time')
+        
+        if start_time is not None and end_time is not None:
+            duration = end_time - start_time
+        else:
+            duration = 0.0
+        
+        export_data['summary'] = {
+            'total_metrics_collected': len(metrics),
+            'metric_types': metrics,
+            'collection_duration': duration
+        }
+        
+        with open(output_path, 'w') as f:
+            json.dump(export_data, f, indent=2)
+        
+        console.print(f"[green]✓[/green] Monitoring data saved to {output_path}")
+        console.print(f"[info]Collected {len(metrics)} metric types over {duration:.1f}s[/info]")
+        
+    except Exception as e:
+        console.print(f"[red]Failed to save monitoring data: {e}[/red]")
 
 def _run_sweep_with_inline_dashboard(console, sweep_runner, config_path, combinations, system_monitor, dashboard, sweep_name):
     """Run sweep with inline dashboard that refreshes in place"""
     from rich.live import Live
     
-    # Initial dashboard setup
     dashboard.update_header(f"Sweep: {sweep_name}")
-    dashboard.update_system_tiles(system_monitor.get_all_stats())
+    dashboard.update_system_tiles(system_monitor.get_current_metrics())
     dashboard.update_progress("starting", 0, [], ["loading", "executing", "finishing"])
     dashboard.update_results()
     dashboard.update_footer(f"Starting sweep with {len(combinations)} benchmarks...")
@@ -215,9 +236,8 @@ def _run_sweep_with_inline_dashboard(console, sweep_runner, config_path, combina
         
         for i in range(0, total_benchmarks, update_interval):
             progress_percent = int((i / total_benchmarks) * 100)
-            
-            # Update dashboard
-            dashboard.update_system_tiles(system_monitor.get_all_stats())
+
+            dashboard.update_system_tiles(system_monitor.get_current_metrics())            
             dashboard.update_progress("executing", progress_percent, ["starting"], ["finishing"])
             dashboard.update_footer(f"Running benchmark {i+1}/{total_benchmarks}...")
             
@@ -232,6 +252,7 @@ def _run_sweep_with_inline_dashboard(console, sweep_runner, config_path, combina
         
         time.sleep(1)
     
+    system_monitor.stop_monitoring()    
     return results
 
 

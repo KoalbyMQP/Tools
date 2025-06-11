@@ -1,7 +1,3 @@
-from rich.panel import Panel
-from rich.text import Text
-from rich.layout import Layout
-
 def display_error(console, message):
     """Display error message"""
     console.print(f"[red bold]❌ Error: {message}[/red bold]")
