@@ -1,10 +1,10 @@
 # ava_bench/monitoring/__init__.py
 
 from .core import StreamManager, MetricSample, TimeManager
-from .collectors import SystemCollector, ProcessCollector, PerfCollector, SimplePerfCollector
+from .collectors import SystemCollector, ProcessCollector, PerfCollector, SimplePerfCollector, MLMemoryIntegration
 
 __all__ = [
-    'StreamingMonitor', 'MetricSample', 'MonitorConfig'
+    'StreamingMonitor', 'MetricSample', 'MonitorConfig', 'MLMemoryIntegration'
 ]
 
 
@@ -26,6 +26,12 @@ class MonitorConfig:
         # Custom perf counters (None = use defaults)
         self.perf_counters = None
 
+        # Memory settings
+        self.collect_memory_profiling = True      # Enable memory profiling
+        self.memory_sampling_hz = 5.0            # Memory profiling sample rate
+        self.enable_tracemalloc = True           # Use Python tracemalloc
+        self.memory_spike_threshold_mb = 5.0     # Alert threshold for memory spikes
+        self.memory_leak_window = 20             # Window size for leak detection
 
 class StreamingMonitor:
     """Main interface for streaming metric collection. Replaces SystemMonitor."""
@@ -68,6 +74,15 @@ class StreamingMonitor:
                     counters=self.config.perf_counters
                 )
             self.stream_manager.add_collector(perf_collector)
+
+        if self.config.collect_memory_profiling:
+            self.memory_collectors = MLMemoryIntegration.add_memory_profiling(
+                stream_manager=self.stream_manager,
+                enable_tracemalloc=self.config.enable_tracemalloc,
+                sampling_rate_hz=self.config.memory_sampling_hz
+            )
+
+
     
     def start_monitoring(self) -> None:
         """Start all metric collection."""
@@ -188,13 +203,14 @@ class StreamingMonitor:
 
 
 # Compatibility function for existing code
-def create_monitor(collect_perf: bool = False, target_pid: int = None) -> StreamingMonitor:
+def create_monitor(collect_perf: bool = False, target_pid: int = None, 
+                   collect_memory: bool = True) -> StreamingMonitor:
     """Create a StreamingMonitor with simple configuration."""
     config = MonitorConfig()
     config.collect_perf_metrics = collect_perf
     config.target_pid = target_pid
+    config.collect_memory_profiling = collect_memory
     return StreamingMonitor(config)
-
 
 # Example usage patterns
 if __name__ == "__main__":
