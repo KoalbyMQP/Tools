@@ -1,0 +1,48 @@
+
+[project]
+name = "ava-bench"
+version = "0"
+description = "Benchmarking suite for Raspberry Pi devices"
+readme = "README.md"
+requires-python = ">=3.9" # TODO: Check for which versions of python this actually works (TESTED 3.12.10)
+license = "MIT"
+authors = [
+    {name = "Jacob Molnia", email = "jrmolnia@wpi.edu"}
+]
+
+dependencies = [
+    "psutil>=7.0.0",
+    "click>=8.1.8",
+    "pyyaml>=6.0.2",
+    "rich>=14.0.0",
+    "numpy>=2.0.2",
+]
+
+[project.optional-dependencies]
+tensorflow = [
+]
+pytorch = [
+]
+opencv = [
+]
+onnx = [
+    "onnxruntime>=1.20.1",
+]
+
+[project.urls]
+Repository = "https://github.com/KoalbyMQP/Tools"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+]
+
+[project.scripts]
+ava-bench = "ava_bench.main:cli"
+
+[tool.setuptools]
+packages = ["ava_bench"]

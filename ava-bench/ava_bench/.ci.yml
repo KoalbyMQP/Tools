@@ -1,0 +1,7 @@
+# ava-bench/.ci.yml
+install_cmd: "uv sync"
+build_cmd: "uv build"
+package_type: "python"
+artifacts:
+  - "dist/*.whl"
+  - "dist/*.tar.gz"

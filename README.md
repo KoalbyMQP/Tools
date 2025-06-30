@@ -10,9 +10,13 @@ Welcome to the Tools Repository! This repository serves as a central hub for a c
 - **Monitoring Project for Raspberry Pi 5**  
   A comprehensive system monitoring solution designed specifically for Raspberry Pi 5.
 
+- **ava-bench**
+  A comprehensive command-line ML benchmarking suite designed specifically for Raspberry Pi devices.
+
 ## Repository Structure
 
 - **/perfmon-cli**: Contains the PerfMon CLI tool, including its main Python script, configuration files, and a README with setup and usage instructions.  
 - **/monitoring**: Contains the monitoring solution for Raspberry Pi 5 with Docker Compose configurations, setup scripts, Grafana dashboards, and associated documentation.
+- **/ava-bench**: Contains the ava-bench CLI tool and all associated code.
 
 If you'd like to learn more about a specific tool, please navigate to its corresponding folder for further details.
