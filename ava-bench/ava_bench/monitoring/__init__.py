@@ -20,7 +20,7 @@ class MonitorConfig:
         self.collect_system_metrics = True
         self.collect_process_metrics = True
         self.collect_perf_metrics = True
-        self.use_simple_perf = True  # Use SimplePerfCollector by default        
+        self.use_simple_perf = False  # Use SimplePerfCollector by default        
         self.target_pid = None
         
         # Custom perf counters (None = use defaults)

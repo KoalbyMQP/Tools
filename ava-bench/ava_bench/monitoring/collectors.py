@@ -11,7 +11,7 @@ import gc
 import time
 from typing import Dict, Any, List, Optional, Tuple
 from collections import defaultdict, deque
-from ..monitoring.core import MetricCollector
+from .core import MetricCollector
 
 
 class SystemCollector(MetricCollector):

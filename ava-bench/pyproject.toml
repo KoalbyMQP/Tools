@@ -42,4 +42,4 @@ dev = [
 ]
 
 [project.scripts]
-ava-bench = "ava_bench.cli.main:cli"
+ava-bench = "ava_bench.main:cli"
