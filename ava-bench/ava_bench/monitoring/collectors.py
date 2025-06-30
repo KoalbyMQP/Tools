@@ -203,9 +203,8 @@ class ProcessCollector(MetricCollector):
         return samples
     
 class PerfCollector(MetricCollector):
-    """Collect hardware performance counters via Linux perf. No magic."""
+    """Collect hardware performance counters via Linux perf."""
     
-    # Hardware counters we care about for ML workloads
     DEFAULT_COUNTERS = [
         'cpu-cycles',
         'instructions', 

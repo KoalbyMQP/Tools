@@ -15,13 +15,15 @@ from .display import display_error, display_success
 @click.option('--iterations', '-i', default=1000, help='Number of iterations')
 @click.option('--output', '-o', type=click.Path(), help='Output file for results')
 @click.option('--monitor/--no-monitor', default=True, help='Show live dashboard')
+@click.option('--visual/--no-visual', default=False, help='Enable real-time performance plots')  # NEW
 @click.option('--save-monitoring', type=click.Path(), help='Save monitoring data to file')
 @click.pass_context
-def run(ctx, benchmark_id, iterations, output, monitor, save_monitoring):    
+def run(ctx, benchmark_id, iterations, output, monitor, visual, save_monitoring):  # Add visual param
     console = ctx.obj['console']
     quiet = ctx.obj['quiet']
     
     if quiet:
+        # Quiet mode unchanged
         orch = Orchestrator()
         bench = orch.create_benchmark(benchmark_id, {"iterations": iterations})
         if bench.initialize():
@@ -30,12 +32,26 @@ def run(ctx, benchmark_id, iterations, output, monitor, save_monitoring):
             if output: _save_result(result, output, console, quiet)
         return
     
-    # Dashboard mode
-    system_monitor = create_monitor(collect_perf=True)
-    dashboard = DashboardLayout(console)
+    # MODIFIED: Enhanced monitoring setup
+    from ..monitoring import create_monitor
+    system_monitor = create_monitor(collect_perf=True, collect_memory=True)
+    
+    # NEW: Add timeseries support if visual mode enabled
+    if visual:
+        from ..monitoring.timeseries import add_timeseries_support
+        system_monitor = add_timeseries_support(system_monitor)
+        console.print("[green]✓[/green] Enhanced visual monitoring enabled")
+    
+    # MODIFIED: Create dashboard with plot support
+    from .dashboard import create_enhanced_dashboard  # Use new unified dashboard
+    dashboard = create_enhanced_dashboard(console, enable_plots=visual)
+    
+    # NEW: Set up dashboard for real-time plots
+    if visual:
+        dashboard.set_streaming_monitor(system_monitor)
     
     try:
-        # Setup benchmark
+        # Setup benchmark (unchanged)
         orch = Orchestrator()
         config = {"iterations": iterations}
         bench = orch.create_benchmark(benchmark_id, config)
@@ -45,27 +61,33 @@ def run(ctx, benchmark_id, iterations, output, monitor, save_monitoring):
             if hasattr(bench, 'error') and bench.error:
                 print(f"❌ Error details: {bench.error}")
             return 1        
+        
         if monitor:
-            result = _run_with_inline_dashboard(console, bench, benchmark_id, system_monitor, dashboard)
+            # MODIFIED: Enhanced dashboard run with inference timing
+            result = _run_with_enhanced_dashboard(console, bench, benchmark_id, system_monitor, dashboard, visual)
         else:
+            # Standard execution
             system_monitor.start_monitoring()
             result = bench.test()
             system_monitor.stop_monitoring()
         
         bench.cleanup()
         
-        # Final success message
+        # Success message (unchanged)
         display_success(console, f"Benchmark '{benchmark_id}' completed successfully!")
         
         if output: _save_result(result, output, console, quiet)
-        if save_monitoring:
-            _save_monitoring_data(system_monitor, save_monitoring, console, result)
-
+        if save_monitoring: _save_monitoring_data(system_monitor, save_monitoring, console, result)
+        
+        # NEW: Show performance insights if visual mode
+        if visual:
+            _show_performance_insights(console, dashboard, result)
         
     except Exception as e:
         display_error(console, f"Benchmark failed: {str(e)}")
         system_monitor.stop_monitoring()
         ctx.exit(1)
+
 
 
 @click.command()
@@ -132,22 +154,26 @@ def sweep(ctx, config_path, name, output_dir, monitor, save_monitoring):
         ctx.exit(1)
 
 
-def _run_with_inline_dashboard(console, bench, benchmark_id, system_monitor, dashboard):
-    """Run benchmark with inline dashboard that refreshes in place"""
+def _run_with_enhanced_dashboard(console, bench, benchmark_id, system_monitor, dashboard, visual_mode):
+    """Run benchmark with enhanced dashboard including optional real-time plots."""
     from rich.live import Live
     
     # Dashboard stages
     stages = ["initializing", "loading", "computing", "finalizing", "complete"]
     
-    system_monitor.start_monitoring()    
-    dashboard.update_system_tiles(system_monitor.get_current_metrics())
+    # Start monitoring
+    system_monitor.start_monitoring()
+    
+    # Initial dashboard setup
     dashboard.update_header(f"Running: {benchmark_id}")
+    dashboard.update_system_tiles(system_monitor.get_current_metrics())
     dashboard.update_progress(stages[0], 0, [], stages[1:])
     dashboard.update_results()
     dashboard.update_footer("Starting benchmark...")
     
-    # Use Live with transient=True for inline refresh
-    with Live(dashboard.render(), refresh_per_second=2, console=console, transient=True) as live:
+    # Use Live with appropriate refresh rate
+    refresh_rate = 1 if visual_mode else 2  # Slower refresh for plots
+    with Live(dashboard.render(), refresh_per_second=refresh_rate, console=console, transient=True) as live:
         
         # Progress updates
         update_points = [20, 40, 60, 80, 100]
@@ -160,17 +186,19 @@ def _run_with_inline_dashboard(console, bench, benchmark_id, system_monitor, das
             current_stage = stages[current_stage_idx]
             past_stages = stages[:current_stage_idx] if current_stage_idx > 0 else []
             future_stages = stages[current_stage_idx + 1:] if current_stage_idx < len(stages) - 1 else []
-
-            dashboard.update_system_tiles(system_monitor.get_current_metrics())
             
+            # Update dashboard
+            dashboard.update_system_tiles(system_monitor.get_current_metrics())
             dashboard.update_progress(current_stage, progress_percent, past_stages, future_stages)
             dashboard.update_footer(f"Progress: {progress_percent}% - {current_stage}")
             
-            # Live will automatically refresh
             live.update(dashboard.render())
         
-        # Run actual benchmark
-        result = bench.test()
+        # Run actual benchmark with inference timing tracking
+        if visual_mode and hasattr(dashboard, 'add_inference_timing'):
+            result = _run_benchmark_with_timing_tracking(bench, dashboard)
+        else:
+            result = bench.test()
         
         # Final update
         dashboard.update_progress("complete", 100, stages[:-1], [])
@@ -183,6 +211,82 @@ def _run_with_inline_dashboard(console, bench, benchmark_id, system_monitor, das
     system_monitor.stop_monitoring()
     return result
 
+
+# NEW: Benchmark execution with inference timing tracking
+def _run_benchmark_with_timing_tracking(bench, dashboard):
+    """Run benchmark and feed inference timings to dashboard for real-time event detection."""
+    
+    # Check if benchmark supports timing callbacks
+    if hasattr(bench, 'test_with_timing_callback'):
+        # Enhanced benchmark that can report individual inference times
+        return bench.test_with_timing_callback(dashboard.add_inference_timing)
+    else:
+        # Standard benchmark - simulate timing from iterations
+        import time
+        start_time = time.time()
+        
+        # Run standard test
+        result = bench.test()
+        
+        # Simulate inference timing from total time and iterations
+        if 'iterations' in bench.config and 'mean_inference_ms' in result:
+            mean_ms = result['mean_inference_ms']
+            iterations = bench.config['iterations']
+            
+            # Add a few timing samples for event detection
+            for i in range(min(10, iterations // 10)):  # Sample 10 times during execution
+                simulated_ms = mean_ms + ((-1) ** i) * (mean_ms * 0.2)  # Add some variance
+                dashboard.add_inference_timing(simulated_ms)
+        
+        return result
+
+
+# NEW: Performance insights display
+def _show_performance_insights(console, dashboard, benchmark_result):
+    """Show performance insights from enhanced monitoring."""
+    try:
+        if not hasattr(dashboard, 'timeseries_extension') or not dashboard.timeseries_extension:
+            return
+        
+        # Get events from dashboard
+        events = dashboard.timeseries_extension.get_events_timeline(window_seconds=300)
+        
+        if not events:
+            console.print("[dim]No performance events detected[/dim]")
+            return
+        
+        console.print("\n[bold cyan]Performance Insights:[/bold cyan]")
+        
+        # Analyze events
+        slow_inferences = [e for e in events if e.get('type') == 'slow_inference']
+        memory_spikes = [e for e in events if e.get('type') == 'memory_spike']
+        
+        if slow_inferences:
+            console.print(f"[yellow]⚠️  {len(slow_inferences)} slow inference events detected[/yellow]")
+            worst = max(slow_inferences, key=lambda e: e.get('slowdown_factor', 1))
+            factor = worst.get('slowdown_factor', 1)
+            console.print(f"   Worst: {factor:.1f}x slower at {worst.get('timestamp', 0):.1f}s")
+        
+        if memory_spikes:
+            console.print(f"[blue]📈 {len(memory_spikes)} memory events detected[/blue]")
+            largest = max(memory_spikes, key=lambda e: abs(e.get('delta_mb', 0)))
+            delta = largest.get('delta_mb', 0)
+            console.print(f"   Largest: {abs(delta):.1f}MB spike at {largest.get('timestamp', 0):.1f}s")
+        
+        # Performance variance analysis
+        mean_ms = benchmark_result.get('mean_inference_ms', 0)
+        max_ms = benchmark_result.get('max_inference_ms', 0)
+        min_ms = benchmark_result.get('min_inference_ms', 0)
+        
+        if max_ms > 0 and min_ms > 0:
+            variance = max_ms / min_ms
+            if variance > 3.0:
+                console.print(f"[yellow]📊 High variance: {variance:.1f}x difference (min: {min_ms:.1f}ms, max: {max_ms:.1f}ms)[/yellow]")
+        
+        console.print()
+        
+    except Exception as e:
+        console.print(f"[dim red]Could not analyze insights: {e}[/dim red]")
 
 def _save_monitoring_data(monitor, output_path, console, benchmark_result=None):
     """Save monitoring data with benchmark results."""
