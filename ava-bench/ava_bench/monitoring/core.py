@@ -184,11 +184,12 @@ class StreamManager:
     def get_all_current_data(self) -> Dict[str, MetricSample]:
         """Get latest sample from each stream."""
         with self._lock:
-            return {
-                metric_type: stream.get_latest()
-                for metric_type, stream in self.streams.items()
-                if stream.get_latest() is not None
-            }
+            result = {}
+            for metric_type, stream in self.streams.items():
+                latest = stream.get_latest()
+                if latest is not None:
+                    result[metric_type] = latest
+            return result
     
     def get_stream(self, metric_type: str) -> Optional[MetricStream]:
         """Get a specific metric stream."""
@@ -200,3 +201,50 @@ class StreamManager:
         with self._lock:
             for stream in self.streams.values():
                 stream.clear()
+    
+    # Compatibility methods for runner.py interface
+    def start_monitoring(self) -> None:
+        """Start monitoring (alias for start_collection for runner compatibility)."""
+        self.start_collection()
+    
+    def stop_monitoring(self) -> None:
+        """Stop monitoring (alias for stop_collection for runner compatibility)."""
+        self.stop_collection()
+    
+    def export_data(self) -> Dict[str, Any]:
+        """Export all collected data for runner compatibility."""
+        exported_data = {
+            'timestamp': self.time_manager.reference_time + self.time_manager.get_timestamp(),
+            'duration': self.time_manager.get_timestamp(),
+            'streams': {},
+            'summary': {}
+        }
+        
+        with self._lock:
+            for metric_type, stream in self.streams.items():
+                # Get all samples from this stream
+                samples = stream.get_samples()
+                if samples:
+                    exported_data['streams'][metric_type] = [
+                        {
+                            'timestamp': sample.timestamp,
+                            'value': sample.value,
+                            'source': sample.source,
+                            'metadata': sample.metadata
+                        }
+                        for sample in samples
+                    ]
+                    
+                    # Create summary statistics
+                    if isinstance(samples[0].value, (int, float)):
+                        values = [s.value for s in samples if isinstance(s.value, (int, float))]
+                        if values:
+                            exported_data['summary'][metric_type] = {
+                                'count': len(values),
+                                'min': min(values),
+                                'max': max(values),
+                                'avg': sum(values) / len(values),
+                                'latest': values[-1]
+                            }
+        
+        return exported_data

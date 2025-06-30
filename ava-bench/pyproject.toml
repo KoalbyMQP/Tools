@@ -40,3 +40,6 @@ python_files = ["test_*.py"]
 dev = [
     "pytest>=8.3.5",
 ]
+
+[project.scripts]
+ava-bench = "ava_bench.cli.main:cli"

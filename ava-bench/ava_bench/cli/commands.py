@@ -2,167 +2,128 @@
 
 import time
 import click
+import shlex
 
 from ..core.orchestrator import Orchestrator
-from ..core.sweep import SweepConfig, Sweep
-from ..monitoring import create_monitor
-from .dashboard import DashboardLayout
+from ..runner import print_results
 from .display import display_error, display_success
 
 
 @click.command()
-@click.argument('benchmark_id')
-@click.option('--iterations', '-i', default=1000, help='Number of iterations')
+@click.argument('command', nargs=-1, required=True)
+@click.option('--timeout', '-t', type=int, help='Timeout in seconds')
 @click.option('--output', '-o', type=click.Path(), help='Output file for results')
-@click.option('--monitor/--no-monitor', default=True, help='Show live dashboard')
-@click.option('--visual/--no-visual', default=False, help='Enable real-time performance plots')  # NEW
+@click.option('--monitor/--no-monitor', default=True, help='Enable system monitoring')
+@click.option('--sampling-rate', default=1.0, help='Monitoring sampling rate in Hz')
 @click.option('--save-monitoring', type=click.Path(), help='Save monitoring data to file')
 @click.pass_context
-def run(ctx, benchmark_id, iterations, output, monitor, visual, save_monitoring):  # Add visual param
+def run(ctx, command, timeout, output, monitor, sampling_rate, save_monitoring):
+    """
+    Run an executable command with optional monitoring.
+    
+    COMMAND can be multiple arguments, e.g.:
+    ava-bench run echo "hello world"
+    ava-bench run python -c "print('hello')"
+    ava-bench run ls -la
+    """
     console = ctx.obj['console']
     quiet = ctx.obj['quiet']
     
-    if quiet:
-        # Quiet mode unchanged
-        orch = Orchestrator()
-        bench = orch.create_benchmark(benchmark_id, {"iterations": iterations})
-        if bench.initialize():
-            result = bench.test()
-            bench.cleanup()
-            if output: _save_result(result, output, console, quiet)
-        return
+    # Convert command tuple to list
+    command_list = list(command)
     
-    # MODIFIED: Enhanced monitoring setup
-    from ..monitoring import create_monitor
-    system_monitor = create_monitor(collect_perf=True, collect_memory=True)
-    
-    # NEW: Add timeseries support if visual mode enabled
-    if visual:
-        from ..monitoring.timeseries import add_timeseries_support
-        system_monitor = add_timeseries_support(system_monitor)
-        console.print("[green]✓[/green] Enhanced visual monitoring enabled")
-    
-    # MODIFIED: Create dashboard with plot support
-    from .dashboard import create_enhanced_dashboard  # Use new unified dashboard
-    dashboard = create_enhanced_dashboard(console, enable_plots=visual)
-    
-    # NEW: Set up dashboard for real-time plots
-    if visual:
-        dashboard.set_streaming_monitor(system_monitor)
+    if not quiet:
+        console.print(f"[info]Running command: [benchmark]{' '.join(command_list)}[/benchmark][/info]")
+        if timeout:
+            console.print(f"[info]Timeout: [metric]{timeout}s[/metric][/info]")
+        if monitor:
+            console.print(f"[info]Monitoring enabled at [metric]{sampling_rate}Hz[/metric][/info]")
+        console.print()
     
     try:
-        # Setup benchmark (unchanged)
+        # Setup orchestrator
         orch = Orchestrator()
-        config = {"iterations": iterations}
-        bench = orch.create_benchmark(benchmark_id, config)
-        
-        if not bench.initialize():
-            print(f"❌ Error: Failed to initialize benchmark: {benchmark_id}")
-            if hasattr(bench, 'error') and bench.error:
-                print(f"❌ Error details: {bench.error}")
-            return 1        
         
         if monitor:
-            # MODIFIED: Enhanced dashboard run with inference timing
-            result = _run_with_enhanced_dashboard(console, bench, benchmark_id, system_monitor, dashboard, visual)
+            orch.setup_monitoring(sampling_rate_hz=sampling_rate)
+        
+        # Run the executable
+        result = orch.run_executable(
+            command=command_list,
+            timeout=timeout,
+            output_file=output,
+            enable_monitoring=monitor
+        )
+        
+        # Display results
+        if not quiet:
+            print_results(result)
+            display_success(console, f"Command completed successfully!")
         else:
-            # Standard execution
-            system_monitor.start_monitoring()
-            result = bench.test()
-            system_monitor.stop_monitoring()
+            # In quiet mode, just show if it succeeded or failed
+            if result['metadata']['success']:
+                console.print("PASS")
+            else:
+                console.print("FAIL")
+                ctx.exit(1)
         
-        bench.cleanup()
-        
-        # Success message (unchanged)
-        display_success(console, f"Benchmark '{benchmark_id}' completed successfully!")
-        
-        if output: _save_result(result, output, console, quiet)
-        if save_monitoring: _save_monitoring_data(system_monitor, save_monitoring, console, result)
-        
-        # NEW: Show performance insights if visual mode
-        if visual:
-            _show_performance_insights(console, dashboard, result)
+        # Save monitoring data if requested
+        if save_monitoring and result.get('monitoring', {}).get('full_data'):
+            _save_monitoring_data(result['monitoring']['full_data'], save_monitoring, console)
         
     except Exception as e:
-        display_error(console, f"Benchmark failed: {str(e)}")
-        system_monitor.stop_monitoring()
+        display_error(console, f"Command failed: {str(e)}")
         ctx.exit(1)
 
+
+def _save_monitoring_data(monitoring_data, filepath, console):
+    """Save monitoring data to file."""
+    import json
+    from pathlib import Path
+    
+    try:
+        output_path = Path(filepath)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(output_path, 'w') as f:
+            json.dump(monitoring_data, f, indent=2, default=str)
+        
+        console.print(f"[success]Monitoring data saved to: {filepath}[/success]")
+    except Exception as e:
+        console.print(f"[error]Failed to save monitoring data: {e}[/error]")
 
 
 @click.command()
-@click.argument('config_path', type=click.Path(exists=True))
-@click.option('--name', '-n', help='Name for this sweep run')
-@click.option('--output-dir', '-o', type=click.Path(), help='Output directory for results')
-@click.option('--monitor/--no-monitor', default=True, help='Show live dashboard')
-@click.option('--save-monitoring', type=click.Path(), help='Save monitoring data to file')
 @click.pass_context
-def sweep(ctx, config_path, name, output_dir, monitor, save_monitoring):
+def list_commands(ctx):
+    """List some common executable commands that can be run."""
     console = ctx.obj['console']
-    quiet = ctx.obj['quiet']
     
-    if quiet:
-        orch = Orchestrator()
-        config = SweepConfig.load(config_path)
-        sweep_runner = Sweep(orch)
-        results = sweep_runner.run(config_path)
-        if output_dir: _save_sweep_results(results, output_dir, name, console, quiet)
-        return
+    orch = Orchestrator()
+    commands = orch.list_available_commands()
     
-    console.print(f"[info]Loading sweep config: [benchmark]{config_path}[/benchmark][/info]")
+    console.print("[info]Common executable commands you can run:[/info]")
+    for cmd in commands:
+        console.print(f"  • {cmd}")
     
-    system_monitor = create_monitor(collect_perf=True)
-    
-    dashboard = DashboardLayout(console)
-    
-    try:
-        # Load and validate config
-        config = SweepConfig.load(config_path)
-        combinations = config.generate_combinations()
-        
-        console.print(f"[info]Generated [metric]{len(combinations)}[/metric] benchmark combinations[/info]")
-        
-        system_monitor.start_monitoring()
-        time.sleep(0.1)  # Brief delay to get initial readings
-        stats = system_monitor.get_current_metrics()
-        
-        console.print(f"[info]Running on: [benchmark]{stats.get('pi_model', 'Unknown')}[/benchmark][/info]")
-        console.print()
-        
-        # Setup sweep
-        orch = Orchestrator()
-        sweep_runner = Sweep(orch)
-        
-        if monitor:
-            results = _run_sweep_with_inline_dashboard(console, sweep_runner, config_path, combinations, system_monitor, dashboard, name or "sweep")
-        else:
-            results = sweep_runner.run(config_path)
-            system_monitor.stop_monitoring()
-        
-        # Display final results table (after dashboard)
-        display_success(console, f"Sweep completed! {len(results)} benchmarks executed.")
-        
-        # Save results if requested
-        if output_dir:
-            _save_sweep_results(results, output_dir, name, console, quiet)
-        if save_monitoring:
-            _save_monitoring_data(system_monitor, save_monitoring, console, results)
-            
-    except Exception as e:
-        display_error(console, f"Sweep failed: {str(e)}")
-        system_monitor.stop_monitoring()  # Make sure to stop monitoring
-        ctx.exit(1)
+    console.print("\n[info]You can run any executable with arguments:[/info]")
+    console.print("  ava-bench run python -c \"print('hello')\"")
+    console.print("  ava-bench run echo \"test message\"")
+    console.print("  ava-bench run ls -la")
 
 
-def _run_with_enhanced_dashboard(console, bench, benchmark_id, system_monitor, dashboard, visual_mode):
-    """Run benchmark with enhanced dashboard including optional real-time plots."""
-    from rich.live import Live
+@click.command()
+@click.pass_context
+def system_info(ctx):
+    """Display system information."""
+    console = ctx.obj['console']
     
-    # Dashboard stages
-    stages = ["initializing", "loading", "computing", "finalizing", "complete"]
+    orch = Orchestrator()
+    info = orch.get_system_info()
     
-    # Start monitoring
-    system_monitor.start_monitoring()
+    console.print("[info]System Information:[/info]")
+    for key, value in info.items():
+        console.print(f"  {key}: {value}")
     
     # Initial dashboard setup
     dashboard.update_header(f"Running: {benchmark_id}")

@@ -1,3 +1,3 @@
-from .main import cli
+from .commands import run
 
-__all__ = ["cli"]
+__all__ = ["run"]
