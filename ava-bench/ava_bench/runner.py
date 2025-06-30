@@ -136,9 +136,17 @@ def combine_results(execution_result: Dict[str, Any],
     if execution_result.get('monitoring_data'):
         monitoring_data = execution_result['monitoring_data']
         
-        # Extract key metrics from monitoring data
+        # Check if we have summary data (from our StreamManager)
+        if 'summary' in monitoring_data:
+            # Use the pre-calculated summary statistics
+            for metric_name, stats in monitoring_data['summary'].items():
+                if isinstance(stats, dict) and 'latest' in stats:
+                    monitoring_summary[metric_name] = stats['latest']
+                elif isinstance(stats, dict) and 'avg' in stats:
+                    monitoring_summary[metric_name] = stats['avg']
+        
+        # Also extract latest values from raw metrics if available
         if 'metrics' in monitoring_data:
-            # Get final values for key metrics
             for metric_name, samples in monitoring_data['metrics'].items():
                 if samples and isinstance(samples, list):
                     latest_sample = samples[-1]
@@ -249,11 +257,24 @@ def print_results(results: Dict[str, Any]) -> None:
     if monitoring:
         print(f"\nSystem Monitoring:")
         for metric, value in monitoring.items():
-            if 'cpu' in metric.lower():
+            # Format different types of metrics nicely
+            if isinstance(value, float):
+                if 'cpu' in metric.lower() and 'percent' in metric.lower():
+                    print(f"  {metric}: {value:.1f}%")
+                elif 'memory' in metric.lower() and 'bytes' in metric.lower():
+                    print(f"  {metric}: {value / 1024 / 1024:.1f} MB")
+                elif 'memory' in metric.lower() and 'percent' in metric.lower():
+                    print(f"  {metric}: {value:.1f}%")
+                elif 'temp' in metric.lower():
+                    print(f"  {metric}: {value:.1f}°C")
+                else:
+                    print(f"  {metric}: {value:.3f}")
+            elif isinstance(value, bool):
+                print(f"  {metric}: {'Yes' if value else 'No'}")
+            else:
                 print(f"  {metric}: {value}")
-            elif 'memory' in metric.lower():
-                print(f"  {metric}: {value}")
-        
+    else:
+        print(f"\nSystem Monitoring: No data collected")
     print(f"{'='*60}\n")
 
 
