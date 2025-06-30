@@ -1,5 +1,5 @@
 # .github/workflows/ci.yml
-name: Universal Tool CI/CD
+name: Tool CI/CD
 
 on:
   pull_request:
