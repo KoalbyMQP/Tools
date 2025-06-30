@@ -43,3 +43,6 @@ dev = [
 
 [project.scripts]
 ava-bench = "ava_bench.main:cli"
+
+[tool.setuptools]
+packages = ["ava_bench"]
