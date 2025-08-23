@@ -1,0 +1,64 @@
+# macOS
+.DS_Store
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+.env
+.venv/
+env/
+venv/
+
+# Visual Studio Code
+.vscode/
+
+# Logs
+*.log
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Icon?
+Desktop.ini
+
+# Build output
+dist/
+build/
+out/
+
+# Compiled source
+*.class
+*.o
+*.so
+*.dll
+*.exe
+
+# Archives
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# Coverage reports
+coverage/
+*.lcov
+
+# IDEs
+.idea/
+*.sublime-workspace
+*.sublime-project
+*.sw?
+
+# Misc
+*.bak
+*.tmp
