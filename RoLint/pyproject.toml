@@ -1,0 +1,41 @@
+[project]
+name = "rolint"
+version = "0.1.5"
+description = "RoLint - A multi-language linter for safe robotic software development (C, C++, Python)"
+authors = [{ name = "Maddux Berry", email = "madduxberry31@gmail.com" }]
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Software Development :: Quality Assurance",
+    "Development Status :: 3 - Alpha"
+]
+
+keywords = ["linter", "robotics", "static-analysis", "c", "cpp", "python"]
+
+dependencies = [
+    "tree-sitter>=0.20.1",
+    "typer>=0.9.0",
+    "pyyaml>=6.0",
+    "rich>=13.0",
+    "flake8>=7.0",
+    "tree-sitter-c>=0.21.0",
+    "tree-sitter-cpp>=0.22.0"
+]
+
+
+[project.scripts]
+rolint = "rolint.cli:app"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
