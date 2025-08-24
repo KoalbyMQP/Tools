@@ -47,6 +47,8 @@
             max-job = 6;
             default = pkgs.mkShell {
                 buildInputs = commonPackages ++ darwinPackages ++ linuxPackages ++ mlDeps;
+                NIX_BUILD_HOOK_BUFFER_SIZE = "8192";
+                NIX_CURL_BUFFER_SIZE = "65536";
 
                 shellHook = ''
                     # Simple colors

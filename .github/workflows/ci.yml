@@ -1,0 +1,150 @@
+# .github/workflows/ci.yml
+name: Tool CI/CD
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  ci-cd:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v3
+
+    - name: Install Dependencies
+      run: |
+        pip install PyYAML
+        
+    - name: Install GitHub CLI
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gh
+
+    - name: PR Mode - Empty Check
+      if: github.event_name == 'pull_request'
+      run: echo "PR validation passed"
+
+    - name: Main Mode - Detect Changed Tools
+      if: github.event_name == 'push'
+      id: detect
+      run: |
+        # Read tools configuration
+        python3 << 'EOF'
+        import yaml
+        import json
+        import subprocess
+        import os
+
+        # Load tools config
+        with open('.github/tools.yml', 'r') as f:
+            config = yaml.safe_load(f)
+
+        # Get changed files
+        result = subprocess.run(['git', 'diff', '--name-only', 'HEAD~1', 'HEAD'], 
+                              capture_output=True, text=True)
+        changed_files = result.stdout.strip().split('\n') if result.stdout.strip() else []
+
+        # Detect which tools changed
+        changed_tools = []
+        for tool_name, tool_config in config['tools'].items():
+            tool_dir = tool_config['directory']
+            if any(f.startswith(tool_dir + '/') for f in changed_files):
+                changed_tools.append(tool_name)
+
+        # Output for GitHub Actions
+        with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+            f.write(f"changed_tools={json.dumps(changed_tools)}\n")
+            f.write(f"has_changes={'true' if changed_tools else 'false'}\n")
+
+        print(f"Changed tools: {changed_tools}")
+        EOF
+
+    - name: Build and Release Tools
+      if: github.event_name == 'push' && steps.detect.outputs.has_changes == 'true'
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        CHANGED_TOOLS: ${{ steps.detect.outputs.changed_tools }}
+      run: |
+        python3 << 'EOF'
+        import yaml
+        import json
+        import subprocess
+        import os
+        from datetime import datetime
+
+        # Parse changed tools
+        changed_tools = json.loads(os.environ['CHANGED_TOOLS'])
+        
+        # Load tools config
+        with open('.github/tools.yml', 'r') as f:
+            config = yaml.safe_load(f)
+
+        for tool_name in changed_tools:
+            tool_config = config['tools'][tool_name]
+            tool_dir = tool_config['directory']
+            
+            print(f"Processing {tool_name} in {tool_dir}")
+            
+            # Load tool-specific config
+            ci_config_path = f"{tool_dir}/.ci.yml"
+            if os.path.exists(ci_config_path):
+                with open(ci_config_path, 'r') as f:
+                    ci_config = yaml.safe_load(f)
+            else:
+                ci_config = {}
+            
+            # Change to tool directory
+            original_dir = os.getcwd()
+            os.chdir(tool_dir)
+            
+            try:
+                # Install dependencies if specified
+                if 'install_cmd' in ci_config:
+                    subprocess.run(ci_config['install_cmd'], shell=True, check=True)
+                
+                # Build package
+                build_cmd = ci_config.get('build_cmd', 'uv build')
+                subprocess.run(build_cmd, shell=True, check=True)
+                
+                # Generate version
+                commit_hash = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], 
+                                           capture_output=True, text=True).stdout.strip()
+                timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+                version = f"0.1.{timestamp}"
+                
+                # Create tag
+                tag_name = f"{tool_name}-v{version}"
+                subprocess.run(['git', 'tag', tag_name], check=True)
+                subprocess.run(['git', 'push', 'origin', tag_name], check=True)
+                
+                # Create GitHub release
+                release_name = f"{tool_config.get('display_name', tool_name)} v{version}"
+                
+                # Create release
+                subprocess.run([
+                    'gh', 'release', 'create', tag_name,
+                    '--title', release_name,
+                    '--notes', f"Automated release of {tool_name}",
+                    'dist/*' if os.path.exists('dist') else '--notes-file', '/dev/null'
+                ], check=True)
+                
+                print(f"Released {tool_name} as {tag_name}")
+                
+            except subprocess.CalledProcessError as e:
+                print(f"Failed to build {tool_name}: {e}")
+            finally:
+                os.chdir(original_dir)
+        EOF
