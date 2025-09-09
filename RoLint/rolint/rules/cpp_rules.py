@@ -111,7 +111,7 @@ def check_switch_statement(node, source_code: str) -> list[dict]:
     case_block_has_exit = False
 
     for i, child in enumerate(children):
-        if child.type == "default_label":
+        if child.type == "default_statement":
             has_default = True
 
         elif child.type == "case_label":
