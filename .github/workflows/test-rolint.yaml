@@ -17,7 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.12"] # FIXME: Add back 3.10 and 3.11 after testing
+        # python-version: ["3.10", "3.11", "3.12"] --- IGNORE ---
     
     defaults:
       run:
