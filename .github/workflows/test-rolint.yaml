@@ -17,17 +17,17 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.8, 3.9, "3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12"]
     
     defaults:
       run:
         working-directory: ./RoLint
     
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v6
       with:
         python-version: ${{ matrix.python-version }}
     
@@ -75,7 +75,7 @@ jobs:
     
     - name: Upload build artifacts (Python 3.11 only)
       if: matrix.python-version == '3.11'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: rolint-dist-${{ github.sha }}
         path: RoLint/dist/
