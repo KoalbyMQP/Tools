@@ -7,6 +7,7 @@
     require_serial: false
     pass_filenames: true
     args: [--output, text]
+    additional_dependencies: ['./RoLint']
 
 -   id: rolint-json
     name: RoLint (JSON output)
@@ -17,3 +18,4 @@
     require_serial: false
     pass_filenames: true
     args: [--output, json, --output-path, rolint_results.json]
+    additional_dependencies: ['./RoLint']
