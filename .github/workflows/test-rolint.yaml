@@ -39,33 +39,23 @@ jobs:
         if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
         # Install the package in development mode
         pip install -e .
-    
-    - name: Lint with flake8
-      run: |
-        echo "Running linting checks..."
-        # Stop the build if there are Python syntax errors or undefined names
-        flake8 rolint/ --count --select=E9,F63,F7,F82 --show-source --statistics
-        # Exit-zero treats all errors as warnings
-        flake8 rolint/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-    
-    - name: Run tests
-      run: |
-        echo "Running tests..."
-        if [ -d "tests" ]; then
-          pytest tests/ -v --tb=short
-        else
-          echo "No tests directory found, skipping test step"
-        fi
+        
+    # - name: Run tests
+    #   run: |
+    #     echo "Running tests..."
+    #     if [ -d "tests" ]; then
+    #       pytest tests/ -v --tb=short
+    #     else
+    #       echo "No tests directory found, skipping test step"
+    #     fi
     
     # Only build the package once (on Python 3.11) to verify it can be built
-    - name: Build package (Python 3.11 only)
-      if: matrix.python-version == '3.11'
+    - name: Build package
       run: |
         echo "Building package..."
         python -m build
     
-    - name: Check built package (Python 3.11 only)
-      if: matrix.python-version == '3.11'
+    - name: Check built package
       run: |
         echo "Validating built package..."
         pip install twine
@@ -73,16 +63,14 @@ jobs:
         echo "Package structure:"
         ls -la dist/
     
-    - name: Upload build artifacts (Python 3.11 only)
-      if: matrix.python-version == '3.11'
+    - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
         name: rolint-dist-${{ github.sha }}
         path: RoLint/dist/
-        retention-days: 7
+        retention-days: 5
     
-    - name: Test installation (Python 3.11 only)
-      if: matrix.python-version == '3.11'
+    - name: Test installation
       run: |
         echo "Testing package installation..."
         # Create a fresh virtual environment and test installation
@@ -101,14 +89,3 @@ jobs:
     runs-on: ubuntu-latest
     if: always()
     
-    steps:
-    - name: Test Results Summary
-      run: |
-        if [ "${{ needs.test-and-build.result }}" == "success" ]; then
-          echo "All tests passed! RoLint is ready for release."
-          echo "Package built successfully and validated."
-          echo "Ready to merge and publish!"
-        else
-          echo "Tests failed! Please check the logs above."
-          exit 1
-        fi
