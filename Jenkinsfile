@@ -10,7 +10,6 @@ pipeline {
         stage('Setup') {
             steps {
                 script {
-                    // Set GitHub status to pending
                     updateGitHubStatus('pending', 'Build started')
                 }
                 
