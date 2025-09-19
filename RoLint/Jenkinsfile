@@ -56,7 +56,7 @@ pipeline {
                         python -m build
                         twine check dist/*
                     '''
-                    archiveArtifacts artifacts: '${PACKAGE_DIR}/dist/*', fingerprint: true
+                    archiveArtifacts artifacts: "${PACKAGE_DIR}/dist/*", fingerprint: true
                 }
             }
         }
