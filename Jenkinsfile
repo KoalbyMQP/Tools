@@ -3,7 +3,7 @@ pipeline {
     
     environment {
         PYPI_TOKEN = credentials('pypi-api-token')
-        GITHUB_TOKEN = credentials('github-token')
+        GITHUB_TOKEN = credentials('github_personal_token')
         PYTHON_VERSION = '3.12'
         PACKAGE_DIR = 'RoLint'
     }
