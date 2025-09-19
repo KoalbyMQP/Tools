@@ -1,0 +1,121 @@
+pipeline {
+    agent {
+        kubernetes {
+            yaml '''
+                apiVersion: v1
+                kind: Pod
+                spec:
+                  containers:
+                  - name: python
+                    image: python:3.12-slim
+                    command:
+                    - sleep
+                    args:
+                    - 99d
+                    tty: true
+                  - name: jnlp
+                    image: jenkins/inbound-agent:latest
+            '''
+        }
+    }
+    
+    environment {
+        PYPI_TOKEN = credentials('pypi-api-token')
+        GITHUB_TOKEN = credentials('github-token')
+        PACKAGE_DIR = 'RoLint'
+    }
+    
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        timeout(time: 20, unit: 'MINUTES')
+    }
+    
+    stages {
+        stage('Setup') {
+            steps {
+                container('python') {
+                    sh '''
+                        apt-get update && apt-get install -y git curl
+                        cd ${PACKAGE_DIR}
+                        rm -rf venv dist build *.egg-info
+                        python -m venv venv
+                        . venv/bin/activate
+                        pip install --upgrade pip build twine
+                        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+                        pip install -e .
+                    '''
+                }
+            }
+        }
+        
+        stage('Build') {
+            steps {
+                container('python') {
+                    sh '''
+                        cd ${PACKAGE_DIR}
+                        . venv/bin/activate
+                        python -m build
+                        twine check dist/*
+                    '''
+                    archiveArtifacts artifacts: '${PACKAGE_DIR}/dist/*', fingerprint: true
+                }
+            }
+        }
+        
+        stage('Publish') {
+            when {
+                branch 'main'
+            }
+            steps {
+                container('python') {
+                    script {
+                        def version = sh(
+                            script: '''
+                                cd ${PACKAGE_DIR}
+                                python -c "
+                                import tomllib
+                                with open('pyproject.toml', 'rb') as f:
+                                    data = tomllib.load(f)
+                                print(data['project']['version'])
+                                "
+                            ''',
+                            returnStdout: true
+                        ).trim()
+                        
+                        def exists = sh(
+                            script: '''
+                                cd ${PACKAGE_DIR}
+                                . venv/bin/activate
+                                if pip index versions rolint | grep -q "''' + version + '''"; then
+                                    echo "true"
+                                else
+                                    echo "false"
+                                fi
+                            ''',
+                            returnStdout: true
+                        ).trim()
+                        
+                        if (exists == 'false') {
+                            sh '''
+                                cd ${PACKAGE_DIR}
+                                . venv/bin/activate
+                                TWINE_USERNAME=__token__ TWINE_PASSWORD=${PYPI_TOKEN} twine upload dist/*
+                            '''
+                            echo "Published version ${version} to PyPI"
+                        } else {
+                            echo "Version ${version} already exists on PyPI"
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            container('python') {
+                sh 'cd ${PACKAGE_DIR} && rm -rf venv dist build *.egg-info'
+            }
+        }
+    }
+}

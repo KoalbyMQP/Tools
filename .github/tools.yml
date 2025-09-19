@@ -1,7 +1,0 @@
-# .github/tools.yml
-
-tools:
-  ava-bench:
-    directory: ava-bench
-    display_name: "AVA-Bench"
-    description: "ML benchmarking suite for Raspberry Pi devices"
