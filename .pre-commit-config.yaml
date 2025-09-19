@@ -1,0 +1,6 @@
+repos:
+-   repo: https://github.com/KoalbyMQP/rolint-pre-commit
+    # RoLint version.
+    rev: v0.1.9
+    hooks:
+    -   id: rolint  # Text output (default)
