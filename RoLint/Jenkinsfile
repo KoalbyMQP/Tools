@@ -21,7 +21,6 @@ pipeline {
     
     environment {
         PYPI_TOKEN = credentials('pypi-api-token')
-        GITHUB_TOKEN = credentials('github-token')
         PACKAGE_DIR = 'RoLint'
     }
     
