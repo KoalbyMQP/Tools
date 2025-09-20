@@ -170,6 +170,19 @@ print(data['project']['version'])
     
     post {
         always {
+            script {
+                def contextName = env.IS_NIGHTLY == 'true' ? 'ci/rolint-nightly' : 
+                               env.IS_PR == 'true' ? 'ci/rolint-pr-build' : 'ci/rolint-release'
+                
+                step([
+                    $class: 'GitHubCommitStatusSetter',
+                    contextSource: [$class: 'ManuallyEnteredCommitContextSource', context: contextName],
+                    statusResultSource: [$class: 'ConditionalStatusResultSource', results: [
+                        [$class: 'AnyBuildResult', message: 'Build completed', state: currentBuild.currentResult]
+                    ]]
+                ])
+            }
+            
             container('python') {
                 sh 'cd ${PACKAGE_DIR} && rm -rf venv dist build *.egg-info'
             }
