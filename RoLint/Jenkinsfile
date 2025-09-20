@@ -20,7 +20,6 @@ pipeline {
     }
     
     triggers {
-        // Nightly build at 2 AM UTC
         cron('0 2 * * *')
     }
     
@@ -35,11 +34,22 @@ pipeline {
     options {
         buildDiscarder(logRotator(numToKeepStr: '10'))
         timeout(time: 20, unit: 'MINUTES')
+        skipDefaultCheckout()
     }
     
     stages {
         stage('Setup') {
             steps {
+                script {
+                    def checkName = env.IS_NIGHTLY == 'true' ? 'RoLint Nightly Build' : 
+                                   env.IS_PR == 'true' ? 'RoLint PR Check' : 'RoLint Release Build'
+                    
+                    publishChecks name: checkName, status: 'IN_PROGRESS', 
+                                summary: 'Building and testing RoLint package...'
+                }
+                
+                checkout scm
+                
                 container('python') {
                     sh '''
                         apt-get update && apt-get install -y git curl
@@ -170,22 +180,19 @@ print(data['project']['version'])
     
     post {
         always {
+            script {
+                def checkName = env.IS_NIGHTLY == 'true' ? 'RoLint Nightly Build' : 
+                               env.IS_PR == 'true' ? 'RoLint PR Check' : 'RoLint Release Build'
+                
+                def conclusion = currentBuild.currentResult == 'SUCCESS' ? 'SUCCESS' : 'FAILURE'
+                def summary = currentBuild.currentResult == 'SUCCESS' ? 
+                            'Build completed successfully' : 'Build failed - check logs for details'
+                
+                publishChecks name: checkName, conclusion: conclusion, summary: summary
+            }
+            
             container('python') {
                 sh 'cd ${PACKAGE_DIR} && rm -rf venv dist build *.egg-info'
-            }
-        }
-        
-        success {
-            script {
-                def buildType = env.IS_NIGHTLY == 'true' ? 'Nightly' : (env.IS_PR == 'true' ? 'PR' : 'Main')
-                echo "${buildType} build completed successfully"
-            }
-        }
-        
-        failure {
-            script {
-                def buildType = env.IS_NIGHTLY == 'true' ? 'Nightly' : (env.IS_PR == 'true' ? 'PR' : 'Main')
-                echo "${buildType} build failed"
             }
         }
     }
