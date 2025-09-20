@@ -26,20 +26,41 @@ pipeline {
     
     environment {
         PYPI_TOKEN = credentials('pypi-api-token')
+        GITHUB_APP_CREDS = credentials('Jenkins_Github')
         PACKAGE_DIR = 'RoLint'
         IS_NIGHTLY = "${env.BUILD_CAUSE == 'TIMERTRIGGER'}"
         IS_MAIN_BRANCH = "${env.BRANCH_NAME == 'main'}"
         IS_PR = "${env.CHANGE_ID != null}"
+        DISABLE_GITHUB_STATUS = 'true'
     }
     
     options {
         buildDiscarder(logRotator(numToKeepStr: '10'))
         timeout(time: 20, unit: 'MINUTES')
+        githubProjectProperty(displayName: '', projectUrlStr: '')
     }
     
     stages {
         stage('Setup') {
             steps {
+                    script {
+                    // Set initial pending status
+                    def contextName = env.IS_NIGHTLY == 'true' ? 'RoLint Nightly' : 
+                                   env.IS_PR == 'true' ? 'RoLint PR Check' : 'RoLint Release'
+                    
+                    def description = env.IS_NIGHTLY == 'true' ? 'Running nightly build...' : 
+                                   env.IS_PR == 'true' ? 'Validating PR...' : 'Building release...'
+                    
+                    step([
+                        $class: 'GitHubCommitStatusSetter',
+                        credentialsId: 'github-app-credentials',
+                        contextSource: [$class: 'ManuallyEnteredCommitContextSource', context: contextName],
+                        statusResultSource: [$class: 'ConditionalStatusResultSource', results: [
+                            [$class: 'BetterThanOrEqualBuildResult', result: 'SUCCESS', message: description, state: 'PENDING']
+                        ]]
+                    ])
+                }
+
                 container('python') {
                     sh '''
                         apt-get update && apt-get install -y git curl
@@ -171,15 +192,20 @@ print(data['project']['version'])
     post {
         always {
             script {
-                def contextName = env.IS_NIGHTLY == 'true' ? 'ci/rolint-nightly' : 
-                               env.IS_PR == 'true' ? 'ci/rolint-pr-build' : 'ci/rolint-release'
+                def contextName = env.IS_NIGHTLY == 'true' ? 'RoLint Nightly' : 
+                            env.IS_PR == 'true' ? 'RoLint PR Check' : 'RoLint Release'
+                
+                def description = env.IS_NIGHTLY == 'true' ? 'Nightly build completed' : 
+                                env.IS_PR == 'true' ? 'PR validation completed' : 'Release build completed'
                 
                 step([
                     $class: 'GitHubCommitStatusSetter',
+                    credentialsId: 'Jenkins_Github',
                     contextSource: [$class: 'ManuallyEnteredCommitContextSource', context: contextName],
                     statusResultSource: [$class: 'ConditionalStatusResultSource', results: [
-                        [$class: 'AnyBuildResult', message: 'Build completed', state: currentBuild.currentResult]
-                    ]]
+                        [$class: 'AnyBuildResult', message: description, state: currentBuild.currentResult]
+                    ]],
+                    commitShaSource: [$class: 'ManuallyEnteredShaSource', sha: env.GIT_COMMIT]
                 ])
             }
             
