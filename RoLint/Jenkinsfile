@@ -1,0 +1,199 @@
+pipeline {
+    agent {
+        kubernetes {
+            yaml '''
+                apiVersion: v1
+                kind: Pod
+                spec:
+                  containers:
+                  - name: python
+                    image: python:3.12-slim
+                    command:
+                    - sleep
+                    args:
+                    - 99d
+                    tty: true
+                  - name: jnlp
+                    image: jenkins/inbound-agent:latest
+            '''
+        }
+    }
+    
+    triggers {
+        cron('0 2 * * *')
+    }
+    
+    environment {
+        PYPI_TOKEN = credentials('pypi-api-token')
+        PACKAGE_DIR = 'RoLint'
+        IS_NIGHTLY = "${env.BUILD_CAUSE == 'TIMERTRIGGER'}"
+        IS_MAIN_BRANCH = "${env.BRANCH_NAME == 'main'}"
+        IS_PR = "${env.CHANGE_ID != null}"
+    }
+    
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        timeout(time: 20, unit: 'MINUTES')
+        skipDefaultCheckout()
+    }
+    
+    stages {
+        stage('Setup') {
+            steps {
+                script {
+                    def checkName = env.IS_NIGHTLY == 'true' ? 'RoLint Nightly Build' : 
+                                   env.IS_PR == 'true' ? 'RoLint PR Check' : 'RoLint Release Build'
+                    
+                    publishChecks name: checkName, status: 'IN_PROGRESS', 
+                                summary: 'Building and testing RoLint package...'
+                }
+                
+                checkout scm
+                
+                container('python') {
+                    sh '''
+                        apt-get update && apt-get install -y git curl
+                        cd ${PACKAGE_DIR}
+                        rm -rf venv dist build *.egg-info
+                        python -m venv venv
+                        . venv/bin/activate
+                        pip install --upgrade pip build twine
+                        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+                        pip install -e .
+                    '''
+                }
+            }
+        }
+        
+        stage('Prepare Nightly Version') {
+            when {
+                environment name: 'IS_NIGHTLY', value: 'true'
+            }
+            steps {
+                container('python') {
+                    script {
+                        def timestamp = new Date().format('yyyyMMddHHmm')
+                        sh """
+                            cd ${PACKAGE_DIR}
+                            python -c "
+import tomllib
+import tomli_w
+from datetime import datetime
+
+# Read current pyproject.toml
+with open('pyproject.toml', 'rb') as f:
+    data = tomllib.load(f)
+
+# Modify version for nightly
+base_version = data['project']['version']
+nightly_version = f'{base_version}.dev${timestamp}'
+data['project']['version'] = nightly_version
+
+# Write back
+with open('pyproject.toml', 'wb') as f:
+    tomli_w.dump(data, f)
+    
+print(f'Nightly version: {nightly_version}')
+                            "
+                        """
+                    }
+                }
+            }
+        }
+        
+        stage('Build') {
+            steps {
+                container('python') {
+                    sh '''
+                        cd ${PACKAGE_DIR}
+                        . venv/bin/activate
+                        python -m build
+                        twine check dist/*
+                    '''
+                    archiveArtifacts artifacts: "${PACKAGE_DIR}/dist/*", fingerprint: true
+                }
+            }
+        }
+        
+        stage('Publish to PyPI') {
+            when {
+                anyOf {
+                    allOf {
+                        environment name: 'IS_MAIN_BRANCH', value: 'true'
+                        not { environment name: 'IS_PR', value: 'true' }
+                    }
+                    environment name: 'IS_NIGHTLY', value: 'true'
+                }
+            }
+            steps {
+                container('python') {
+                    script {
+                        def version = sh(
+                            script: '''
+                                cd ${PACKAGE_DIR}
+                                python -c "
+import tomllib
+with open('pyproject.toml', 'rb') as f:
+    data = tomllib.load(f)
+print(data['project']['version'])
+                                "
+                            ''',
+                            returnStdout: true
+                        ).trim()
+                        
+                        // For nightly builds, always publish
+                        // For main branch, check if version exists
+                        def shouldPublish = env.IS_NIGHTLY == 'true'
+                        
+                        if (!shouldPublish) {
+                            def exists = sh(
+                                script: """
+                                    if curl -s https://pypi.org/pypi/rolint/json | grep -q '"${version}"'; then
+                                        echo "true"
+                                    else
+                                        echo "false"
+                                    fi
+                                """,
+                                returnStdout: true
+                            ).trim()
+                            
+                            shouldPublish = (exists == 'false')
+                        }
+                        
+                        if (shouldPublish) {
+                            sh '''
+                                cd ${PACKAGE_DIR}
+                                . venv/bin/activate
+                                TWINE_USERNAME=__token__ TWINE_PASSWORD=${PYPI_TOKEN} twine upload dist/*
+                            '''
+                            
+                            def buildType = env.IS_NIGHTLY == 'true' ? 'nightly' : 'stable'
+                            echo "Published ${buildType} version ${version} to PyPI"
+                        } else {
+                            echo "Version ${version} already exists on PyPI, skipping upload"
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            script {
+                def checkName = env.IS_NIGHTLY == 'true' ? 'RoLint Nightly Build' : 
+                               env.IS_PR == 'true' ? 'RoLint PR Check' : 'RoLint Release Build'
+                
+                def conclusion = currentBuild.currentResult == 'SUCCESS' ? 'SUCCESS' : 'FAILURE'
+                def summary = currentBuild.currentResult == 'SUCCESS' ? 
+                            'Build completed successfully' : 'Build failed - check logs for details'
+                
+                publishChecks name: checkName, conclusion: conclusion, summary: summary
+            }
+            
+            container('python') {
+                sh 'cd ${PACKAGE_DIR} && rm -rf venv dist build *.egg-info'
+            }
+        }
+    }
+}
