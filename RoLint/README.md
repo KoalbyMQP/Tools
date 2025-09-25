@@ -10,12 +10,13 @@ This Linter is designed with MISRA-C, MISRA-C++, PEP8, and The Power Of 10 Stand
 
 ## UPDATE 0.1.9:  
 
-### Changes to RoLint for the 0.1.9 update:  
+### Changes to RoLint for the 0.1.10 update:  
 > Bug Fixes:  
-> > Raised minimum python version to 3.12
-> > Fixed rolint: ignore bug where it would ignore the comment instead of the intended line itself.
-> > Fixed versioning issue in pyproject.toml, leading to some issues with versioning and causing traceback issues.  
+> > Raised minimum python version to 3.12  
+> > Fixed rolint: ignore bug where it would ignore the comment instead of the intended line itself.  
+> > Fixed versioning issue in pyproject.toml, leading to some issues with versioning and causing traceback issues.    
 > > Structs no longer have false positive issue with implicit casting.  
+> > Fixed default statement bug in C/C++
 
 > Features:  
 > > Flags: Ignores / Overrides are now flagged and appear in stdout.  

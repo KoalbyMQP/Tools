@@ -7,13 +7,13 @@ def check_switch_statement(node, source_code: str) -> list[dict]:
     has_default = False
 
     for child in node.named_children:
-        if child.type == "default_label":
+        if child.type in {"default_label", "default"}:
             has_default = True
 
         def walk_switch_subtree(n):
             nonlocal has_default, violations
 
-            if n.type == "default_label":
+            if n.type in {"default_label", "default"}:
                 has_default = True
 
             elif n.type in {"break_statement", "continue_statement"}:
@@ -78,7 +78,7 @@ def block_has_terminator_or_fallthrough_comment(stmts, source_code: str) -> bool
     for stmt in reversed(stmts):
         text = source_code[stmt.start_byte:stmt.end_byte].decode("utf-8").strip()
 
-        if stmt.type in {"break_statement", "return_statement", "goto_statement", "throw_statement"}:
+        if stmt.type in {"break_statement", "return_statement", "throw_statement"}:
             return True
         if "fallthrough" in text.lower():
             return True

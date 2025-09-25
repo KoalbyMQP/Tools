@@ -36,25 +36,6 @@ void test() {
 
     test();
 
-    // rolint: ignore-block
-    switch (x) {
-    case 1:
-        printf("One\n");  // No break here!
-    case 2:
-        printf("Two\n");
-        break;
-    case 3:
-        printf("Three\n");
-        // fallthrough  //
-    case 4:
-        printf("Four\n");
-        break;
-}
-
-
-    return;
-    temp += 1;                    // 🚨 dead code
-}
 
 int main() {
     test();
