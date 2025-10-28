@@ -3,9 +3,12 @@ from pathlib import Path
 from typing import List
 from rolint.config import load_config, save_config
 from rolint.main import run_linter
+import sys
 
 ##Main entry point for command line with rolint
 app = typer.Typer(help="Rolint - Linter for robotics code (C, C++, Python)")
+
+violations = []
 
 @app.command()
 def check(
@@ -29,17 +32,26 @@ def check(
     true_output_path = Path(output_path_str)
     
     # Process each path
+
+    all_violations: list[dict] = []
+
     exit_code = 0
     for path in paths:
         try:
-            run_linter(path, lang=lang, output_format=output, output_path=true_output_path)
+            v = run_linter(path, lang=lang, output_format=output, output_path=true_output_path)
+            # ensure v is a list
+            all_violations.extend(v or [])
         except Exception as e:
             typer.echo(f"Error processing {path}: {e}", err=True)
             exit_code = 1
-    
-    # Exit with error code if any files had issues
+
     if exit_code != 0:
         raise typer.Exit(code=exit_code)
+
+    if all_violations:
+        sys.exit(1)
+    else:
+        sys.exit(0)
 
 
 @app.command()

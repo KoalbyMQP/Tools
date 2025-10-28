@@ -101,42 +101,49 @@ def check_banned_funcs(node, source_code: str) -> list[dict]:
 def check_switch_statement(node, source_code: str) -> list[dict]:
     violations = []
 
+    def is_default_case(n) -> bool:
+        # Covers both grammars:
+        # - 'default_statement'
+        # - 'case_statement' without a 'value' field → default
+        if n.type == "default_statement":
+            return True
+        if n.type == "case_statement" and n.child_by_field_name("value") is None:
+            return True
+        return False
+
+    def contains_terminator(n) -> bool:
+        # Accept only break/return as a proper terminator for a case.
+        # 'continue' is *not* a terminator in a switch.
+        if n.type in {"break_statement", "return_statement"}:
+            return True
+        # Some grammars expose raw tokens:
+        if n.type in {"break", "return"}:
+            return True
+        for ch in getattr(n, "named_children", []):
+            if contains_terminator(ch):
+                return True
+        # Fallback to raw children in case statements are non-named
+        for ch in getattr(n, "children", []):
+            if contains_terminator(ch):
+                return True
+        return False
+
+    body = node.child_by_field_name("body")
+    if not body:
+        return violations
+
     has_default = False
 
-    for child in node.named_children:
-        if child.type in {"default_label", "default_statement", "default"}:
-            has_default = True
-
-        def walk_switch_subtree(n):
-            nonlocal has_default, violations
-            if n.type in {"default_label", "default_statement", "default"}:
+    # Iterate the switch body and evaluate only case/default nodes
+    for item in getattr(body, "named_children", body.children):
+        if item.type in {"case_statement", "default_statement"}:
+            if is_default_case(item):
                 has_default = True
-
-            elif n.type in {"break_statement", "continue_statement"}:
-                violations += check_break_continue_in_switch(n, source_code)
-
-            for child in n.children:
-                walk_switch_subtree(child)
-
-    walk_switch_subtree(node)
-
-    # Check for fallthrough
-    children = [child for child in node.child_by_field_name("body").children if child.type not in {'{', '}'}]
-    current_label = None
-    current_block = []
-
-    for child in children:
-        if child.type in {"case_statement", "default_statement"}:
-            if current_label is not None:
-                if not block_has_terminator_or_fallthrough_comment(current_block, source_code):
-                    violations.append({
-                        "line": current_label.start_point[0] + 1,
-                        "message": f"Case falls through implicitly. Add 'break;', 'return;', or comment like '/* fallthrough */'."
-                    })
-            current_label = child
-            current_block = []
-        else:
-            current_block.append(child)
+            if not contains_terminator(item):
+                violations.append({
+                    "line": item.start_point[0] + 1,
+                    "message": "Case falls through implicitly. Add 'break;' or 'return;'."
+                })
 
     if not has_default:
         violations.append({
@@ -146,38 +153,6 @@ def check_switch_statement(node, source_code: str) -> list[dict]:
 
     return violations
 
-# Check to make sure we are not using break or continue in standalone switch cases. danger of undefined logic
-def check_break_continue_in_switch(node, source_code: str) -> list[dict]:
-    violations = []
-    current = node.parent
-
-    # Find enclosing control structures
-    inside_loop = False
-    inside_switch = False
-
-    while current:
-        if current.type in {"for_statement", "while_statement", "do_statement"}:
-            inside_loop = True
-        if current.type == "switch_statement":
-            inside_switch = True
-            break
-        current = current.parent
-    if node.type == "break_statement":
-        # 'break' is allowed in switch and loop — do not warn
-        pass
-
-    return violations
 
 
-# Helper function to detect fallthrough comment to allow for fallthrough
-def block_has_terminator_or_fallthrough_comment(stmts, source_code: str) -> bool:
-    for stmt in reversed(stmts):
-        text = source_code[stmt.start_byte:stmt.end_byte].decode("utf-8").strip()
 
-        if stmt.type in {"break_statement", "return_statement", "throw_statement"}:
-            return True
-        if "fallthrough" in text.lower():
-            return True
-        if stmt.type != "comment":
-            break  # hit a code statement that's not a terminator
-    return False

@@ -49,7 +49,7 @@ public:
         switch (val) {
         case 1:
             cout << "One" << endl;
-            // ❌ missing break (fallthrough)
+            break;
         case 2:
             cout << "Two" << endl;
             continue;

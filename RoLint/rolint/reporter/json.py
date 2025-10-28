@@ -16,7 +16,7 @@ def report_json(violations: list[dict], ignored_lines: list[dict]=None, ignored_
             file = v["file"]
             grouped.setdefault(file, []).append({
                 "line": v["line"],
-                "message": f"VIOLATION: {v["message"]}"
+                "message": f"VIOLATION: {v['message']}"
             })
 
     if ignored_lines:
@@ -24,7 +24,7 @@ def report_json(violations: list[dict], ignored_lines: list[dict]=None, ignored_
                 file = flag["file"]
                 grouped.setdefault(file, []).append({
                     "line": flag["line"],
-                    "message": f"FLAG: Ignored or Overridden Line at Line {flag["line"]}"
+                    "message": f"FLAG: Ignored or Overridden Line at Line {flag['line']}"
                 })
     
     if ignored_blocks:
@@ -32,7 +32,7 @@ def report_json(violations: list[dict], ignored_lines: list[dict]=None, ignored_
                 file = flag["file"]
                 grouped.setdefault(file, []).append({
                     "line": flag["line"],
-                    "message": f"FLAG: Ignored or Overridden Code Block at Line {flag["line"]}"
+                    "message": f"FLAG: Ignored or Overridden Code Block at Line {flag['line']}"
                 })
     # Dump output into json
     with open(output_path, "w", encoding="utf-8") as f:

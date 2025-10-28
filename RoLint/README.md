@@ -8,20 +8,18 @@
 RoLint is designed to be a robust and strict linter for robotics / embedded systems. It was originally developed for the Humanoid Robot Project at Worcester Polytechnic Institute.
 This Linter is designed with MISRA-C, MISRA-C++, PEP8, and The Power Of 10 Standards in mind. Below is how to install and use RoLint, as well as an overview of the rules for the linter.
 
-## UPDATE 0.1.9:  
+## UPDATE 0.1.12:  
 
-### Changes to RoLint for the 0.1.10 update:  
+### Changes to RoLint for the 0.1.12 update:  
 > Bug Fixes:  
-> > Raised minimum python version to 3.12  
-> > Fixed rolint: ignore bug where it would ignore the comment instead of the intended line itself.  
-> > Fixed versioning issue in pyproject.toml, leading to some issues with versioning and causing traceback issues.    
-> > Structs no longer have false positive issue with implicit casting.  
-> > Fixed default statement bug in C/C++
+> > Lowered minimum Python Version to 3.10  
+> > Fixed default statement bug which would send a violation for missing break/return even if one was there in C++.   
+> > Removed Emoji Output in terminal which would cause issues in some IDEs and terminals.  
+
 
 > Features:  
-> > Flags: Ignores / Overrides are now flagged and appear in stdout.  
-> > JSON: Updated JSON output to support flags.  
-> > Stdout: Cleaned up STDOUT, made it easy to discern between flags and violations.  
+> > $ rolint check  command can now take multiple files as input. (See rolint --help for more)
+> > .rolintignore files now supported (.gitignore grammar) to ignore files in a directory from rolint checks. 
 
 ### Roadmap / Future Features:  
 > Using Rich formatting for clean output to console
@@ -72,7 +70,10 @@ For example, RoLint will ignore a for loop, and all of the code inside of the fo
 > "// rolint: ignore-block"  
 ### Python:  
 > "# rolint: ignore"  
-> "# rolint: ignore-block"  
+> "# rolint: ignore-block"    
+
+RoLint now also features a .rolintignore file support feature. By adding .rolintignore into a directory, you can tell RoLint to
+ignore any files/file types in the same style as a .gitignore file.
 
 ## Overview of Rules
 
